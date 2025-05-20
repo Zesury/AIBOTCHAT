@@ -15,28 +15,28 @@ export default async function handler(req, res) {
 
     if (!query) {
       return res.status(400).json({ error: "La consulta es requerida" })
-    }    // Cargar las claves API desde el archivo de configuración
-    let apiKey, xaiApiKey;
-    try {
-      const config = await import('../config.json', { assert: { type: 'json' } });
-      apiKey = config.default.groqApiKey;
-      xaiApiKey = config.default.xaiApiKey;
-    } catch (error) {
-      console.error("Error al cargar la configuración:", error);
-      return res.status(500).json({ error: "Error al cargar la configuración" });
+    }    // Usar las variables de entorno
+    const apiKey = process.env.GROQ_API_KEY;
+    const xaiApiKey = process.env.XAI_API_KEY;
+    
+    if (!apiKey || !xaiApiKey) {
+      console.error("Error: API keys no encontradas en las variables de entorno");
+      return res.status(500).json({ error: "Error de configuración del servidor" });
     }
 
     try {      // Llamar directamente a la API de Groq con timeout
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000); // 30 segundos de timeout
-
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30 segundos de timeout      console.log("Iniciando llamada a API Groq...");      console.log("Iniciando llamada a Groq API con query:", query.substring(0, 50) + "...");
       const grokResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
+          "Authorization": `Bearer ${apiKey}`,
+          "Accept": "application/json"
         },
-        body: JSON.stringify({          model: "llama3-70b-8192",
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: "mixtral-8x7b-32768",
           messages: [
             {
               role: "system",              content: system || `Eres un asistente virtual amigable y conversacional para el TESSFP. 
@@ -65,31 +65,53 @@ export default async function handler(req, res) {
         signal: controller.signal
       })
 
-      clearTimeout(timeout);
-
-      if (!grokResponse.ok) {
-        throw new Error(`Error en la API de Groq: ${grokResponse.status} ${grokResponse.statusText}`)
+      clearTimeout(timeout);      if (!grokResponse.ok) {
+        const errorText = await grokResponse.text().catch(e => 'No error text available');
+        console.error(`Error de Groq API (${grokResponse.status}):`, errorText);
+        throw new Error(`Error en la API de Groq: ${grokResponse.status} - ${errorText}`);
       }
 
-      const data = await grokResponse.json()
-      const response = data.choices?.[0]?.message?.content || "No se pudo obtener una respuesta."
+      const data = await grokResponse.json();
+      console.log("Respuesta recibida de Groq API");
+      
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        console.error("Respuesta inesperada de Groq:", JSON.stringify(data));
+        throw new Error("Formato de respuesta inválido de Groq");
+      }
 
-      return res.status(200).json({ response })
-    } catch (error) {
-      console.error("Error al llamar a la API de Groq:", error)
+      const response = data.choices[0].message.content;
+      if (!response || typeof response !== 'string') {
+        throw new Error("Respuesta vacía o inválida de Groq");
+      }
+
+      return res.status(200).json({ response })    } catch (error) {
+      console.error("Error detallado al llamar a la API de Groq:", error);
+      
+      if (error.name === 'AbortError') {
+        console.log("La solicitud excedió el tiempo límite, usando respuesta de fallback");
+        return res.status(200).json({ 
+          response: simulateGrokResponse(query),
+          fallback: true,
+          error: "La solicitud excedió el tiempo límite"
+        });
+      }
+
+      console.log("Error en la API, usando respuesta de fallback");
       return res.status(200).json({
         response: simulateGrokResponse(query),
         fallback: true,
         error: error.message
-      })
+      });
+    } finally {
+      clearTimeout(timeout);
     }
   } catch (error) {
-    console.error("Error al procesar la solicitud:", error)
+    console.error("Error en el handler principal:", error);
     return res.status(200).json({
-      response: simulateGrokResponse(req.body?.query || ""),
+      response: simulateGrokResponse(query || ""),
       fallback: true,
-      error: error.message
-    })
+      error: "Error interno del servidor: " + error.message
+    });
   }
 }
 
