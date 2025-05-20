@@ -1,12 +1,6 @@
 // Archivo: api/grok.js
 // Este archivo maneja las solicitudes a la API de Grok
 import fetch from 'node-fetch';
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Función para manejar solicitudes POST
 export default async function handler(req, res) {
@@ -24,29 +18,35 @@ export default async function handler(req, res) {
     let tessfpData = "";
     try {
       const TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTfyt324lkoc9CpJcc09KaOg47eE4XAFYGBvxPe26xTzfkypdGJlfIlQl5FmobVmlvlsNGpYcZZYhL7/pub?output=tsv";
-      console.log("Intentando cargar TSV desde:", TSV_URL);
+      console.log("Intentando cargar TSV desde Google Sheets...");
+        const response = await fetch(TSV_URL);
       
-      const response = await fetch(TSV_URL);
       if (!response.ok) {
         throw new Error(`Error al obtener TSV: ${response.status} ${response.statusText}`);
       }
       
-      const rawData = await response.text();
-      if (!rawData || rawData.trim() === "") {
+      const rawData = await response.text();      if (!rawData || rawData.trim() === "") {
         throw new Error("El archivo TSV está vacío");
       }
       
       // Procesar el TSV en un formato más legible
-      const lines = rawData.split('\n').map(line => line.trim()).filter(Boolean);
-      const processed = lines.map(line => {
-        const [category, info] = line.split('\t').map(s => s.trim());
-        return info ? `${category}: ${info}` : category;
-      }).join('\n');
+      const lines = rawData.split('\n')
+        .map(line => line.trim())
+        .filter(Boolean); // Eliminar líneas vacías
+        const processed = lines.map(line => {
+        const parts = line.split('\t').map(s => s.trim());
+        if (parts.length < 2) return null;
+        const [category, info] = parts;
+        return info ? `${category}: ${info}` : null;
+      })
+      .filter(Boolean) // Eliminar elementos nulos
+      .join('\n');
       
-      tessfpData = processed;
-      console.log("Datos TSV cargados exitosamente");
+      tessfpData = processed || "Información básica del TESSFP no disponible en este momento.";
+      console.log("Datos TSV procesados exitosamente");
     } catch (error) {
-      console.warn("No se pudo cargar el archivo TSV:", error.message);
+      console.warn("Error al cargar TSV:", error.message);
+      tessfpData = "Información básica del TESSFP no disponible en este momento.";
     }
     
     // Usar las variables de entorno
@@ -58,18 +58,16 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Error de configuración del servidor" });
     }
 
-    try {      // Llamar directamente a la API de Groq con timeout
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000); // 30 segundos de timeout      console.log("Iniciando llamada a API Groq...");      console.log("Iniciando llamada a Groq API con query:", query.substring(0, 50) + "...");
+    try {      // Llamar directamente a la API de Groq con timeout      console.log("Iniciando llamada a Groq API...");
       const grokResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`,
           "Accept": "application/json"
-        },
-        signal: controller.signal,
-        body: JSON.stringify({          model: "mixtral-8x7b-32768",
+        },        body: JSON.stringify({
+          model: "mixtral-8x7b-32768",
+          temperature: 0.5,
           messages: [
             {
               role: "system",
@@ -107,15 +105,12 @@ export default async function handler(req, res) {
               content: query
             }
           ],
-          max_tokens: 500
-        }),
-        signal: controller.signal
-      })
+          max_tokens: 500        })
+      });
 
-      clearTimeout(timeout);      if (!grokResponse.ok) {
-        const errorText = await grokResponse.text().catch(e => 'No error text available');
-        console.error(`Error de Groq API (${grokResponse.status}):`, errorText);
-        throw new Error(`Error en la API de Groq: ${grokResponse.status} - ${errorText}`);
+      if (!grokResponse.ok) {
+        console.error(`Error de Groq API: ${grokResponse.status}`);
+        throw new Error(`Error en la API de Groq: ${grokResponse.status}`);
       }
 
       const data = await grokResponse.json();
@@ -148,12 +143,9 @@ export default async function handler(req, res) {
         response: simulateGrokResponse(query),
         fallback: true,
         error: error.message
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+      });    }
   } catch (error) {
-    console.error("Error en el handler principal:", error);
+    console.error("Error en el handler principal:", error.message);
     return res.status(200).json({
       response: simulateGrokResponse(query || ""),
       fallback: true,
