@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# API keys and secrets
+**/config.js
+**/config.json
+
+# Build files
+dist/
+build/
+
+# Temporary files
+*.tmp
