@@ -1,0 +1,49 @@
+// Reemplazar la función fetchGrokResponse con esta versión mejorada:
+async function fetchGrokResponse(query) {
+  try {
+    console.log("Solicitando respuesta a Grok para:", query)
+
+    // Construir la URL para la API de Grok
+    const apiUrl = "https://api.groq.com/openai/v1/chat/completions"
+    const apiKey = "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"
+
+    // Realizar la solicitud a la API
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "llama3-70b-8192",
+        messages: [
+          {
+            role: "system",
+            content: "Eres un asistente virtual amigable y conversacional para el Tecnológico de Estudios Superiores de San Felipe del Progreso (TESSFP). Responde de manera natural, amigable y conversacional en español."
+          },
+          {
+            role: "user",
+            content: query
+          }
+        ],
+        max_tokens: 500
+      })
+    })
+
+    // Verificar si la respuesta es exitosa
+    if (!response.ok) {
+      console.error("Error en la respuesta de Groq:", response.status, response.statusText)
+      throw new Error(`Error en la API: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error("Respuesta inválida del servidor")
+    }
+
+    return data.choices[0].message.content
+  } catch (error) {
+    console.error("Error al obtener respuesta de Grok:", error)
+    return null
+  }
+}

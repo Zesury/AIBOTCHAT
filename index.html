@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chatbot TESSFP</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>Asistente Virtual TESSFP</h1>
+                <div class="header-actions">
+                    <button id="save-chat-btn" title="Guardar conversación" aria-label="Guardar conversación">
+                        <i class="save-icon"></i>
+                    </button>
+                    <button id="view-history-btn" title="Ver historial" aria-label="Ver historial de conversaciones">
+                        <i class="history-icon"></i>
+                    </button>
+                    <button id="toggle-theme-btn" title="Cambiar tema" aria-label="Cambiar tema claro/oscuro">
+                        <i class="theme-icon"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <!-- Los mensajes se añadirán aquí dinámicamente -->
+            </div>
+            <div id="suggestions-container" class="suggestions-container">
+                <!-- Las sugerencias se añadirán aquí dinámicamente -->
+            </div>
+            <div class="chat-input">
+                <input type="text" id="user-input" placeholder="Escribe tu pregunta aquí..." autocomplete="off">
+                <button id="voice-btn" title="Hablar para preguntar" aria-label="Activar reconocimiento de voz"><i class="mic-icon"></i></button>
+                <button id="send-btn">Enviar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal para historial de conversaciones -->
+    <div id="history-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Historial de Conversaciones</h2>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="history-list">
+                <!-- El historial se añadirá aquí dinámicamente -->
+            </div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+// Archivo: api/grok.js
+// Este archivo maneja las solicitudes a la API de Grok
+import fetch from 'node-fetch';
+
+// Función para manejar solicitudes POST
+export default async function handler(req, res) {
+  // Verificar que sea una solicitud POST
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Método no permitido" })
+  }
+
+  try {
+    // Extraer la consulta y el contexto del sistema del cuerpo de la solicitud
+    const { query, system } = req.body
+
+    if (!query) {
+      return res.status(400).json({ error: "La consulta es requerida" })
+    }    // Cargar las claves API desde el archivo de configuración
+    let apiKey, xaiApiKey;
+    try {
+      const config = await import('../config.json', { assert: { type: 'json' } });
+      apiKey = config.default.groqApiKey;
+      xaiApiKey = config.default.xaiApiKey;
+    } catch (error) {
+      console.error("Error al cargar la configuración:", error);
+      return res.status(500).json({ error: "Error al cargar la configuración" });
+    }
+
+    try {      // Llamar directamente a la API de Groq con timeout
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30 segundos de timeout
+
+      const grokResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({          model: "llama3-70b-8192",
+          messages: [
+            {
+              role: "system",              content: system || `Eres un asistente virtual amigable y conversacional para el TESSFP. 
+              IMPORTANTE:
+              1) Si ya estás en una conversación, NO saludes nuevamente.
+              2) Si alguien responde "sí", "ok" o similar a una pregunta tuya, proporciona la información que ofreciste.
+              3) Mantén tus respuestas enfocadas en el tema y el contexto actual.
+              4) Sé conciso y directo, evita repetir información.
+              5) Para preguntas sobre la escuela que no puedas confirmar en tu base de datos:
+                 - Comienza tu respuesta con "No estoy completamente seguro, pero..."
+                 - Da una respuesta general basada en el conocimiento común de instituciones educativas
+                 - Siempre termina invitando a verificar la información directamente en la escuela o a través de sus redes sociales oficiales
+              6) Si no sabes algo específico del TESSFP, sé honesto y sugiere contactar directamente a la institución.`
+            },
+            ...(req.body.conversationHistory || []).map(msg => ({
+              role: msg.role,
+              content: msg.content
+            })),
+            {
+              role: "user",
+              content: query
+            }
+          ],
+          max_tokens: 500
+        }),
+        signal: controller.signal
+      })
+
+      clearTimeout(timeout);
+
+      if (!grokResponse.ok) {
+        throw new Error(`Error en la API de Groq: ${grokResponse.status} ${grokResponse.statusText}`)
+      }
+
+      const data = await grokResponse.json()
+      const response = data.choices?.[0]?.message?.content || "No se pudo obtener una respuesta."
+
+      return res.status(200).json({ response })
+    } catch (error) {
+      console.error("Error al llamar a la API de Groq:", error)
+      return res.status(200).json({
+        response: simulateGrokResponse(query),
+        fallback: true,
+        error: error.message
+      })
+    }
+  } catch (error) {
+    console.error("Error al procesar la solicitud:", error)
+    return res.status(200).json({
+      response: simulateGrokResponse(req.body?.query || ""),
+      fallback: true,
+      error: error.message
+    })
+  }
+}
+
+// Función para simular una respuesta de Grok (como fallback)
+function simulateGrokResponse(query) {
+  // Normalizar la consulta
+  const normalizedQuery = query.toLowerCase()
+
+  // Respuestas simuladas basadas en palabras clave
+  if (normalizedQuery.includes("clima") || normalizedQuery.includes("tiempo")) {
+    return "No tengo acceso a información en tiempo real sobre el clima, pero puedo ayudarte con información sobre el TESSFP."
+  }
+
+  if (normalizedQuery.includes("recomienda") || normalizedQuery.includes("sugieres")) {
+    return "Como asistente del TESSFP, puedo recomendarte que consultes la página oficial para obtener información actualizada sobre las carreras y servicios que ofrece el Tecnológico."
+  }
+
+  if (normalizedQuery.includes("piensas") || normalizedQuery.includes("opinas")) {
+    return "Mi función es proporcionar información objetiva sobre el TESSFP, no expresar opiniones personales. ¿Hay algo específico sobre el Tecnológico que te gustaría saber?"
+  }
+
+  // Para consultas muy cortas o de una sola letra
+  if (normalizedQuery.length < 3) {
+    return "Parece que tu mensaje es muy corto. ¿Podrías proporcionar más detalles sobre lo que quieres saber? Estoy aquí para ayudarte con información sobre el TESSFP."
+  }
+
+  // Para respuestas afirmativas como "okey", "ok", "sí", etc.
+  if (["ok", "okey", "okay", "vale", "si", "sí", "claro", "entendido", "perfecto", "bien"].includes(normalizedQuery)) {
+    return "¡Perfecto! Estoy aquí para ayudarte con cualquier información sobre el TESSFP. ¿Hay algo específico que te gustaría saber sobre el Tecnológico?"
+  }
+  // Respuesta genérica para otras consultas
+  if (normalizedQuery.includes("escuela") || normalizedQuery.includes("tessfp") || 
+      normalizedQuery.includes("tecnologico") || normalizedQuery.includes("estudiar") ||
+      normalizedQuery.includes("carrera") || normalizedQuery.includes("curso")) {
+    return "No estoy completamente seguro sobre los detalles específicos, pero te invito a verificar esta información directamente en la escuela o a través de las redes sociales oficiales del TESSFP. ¿Te gustaría que te proporcione los medios de contacto oficiales?"
+  }
+  return "Estoy aquí para ayudarte principalmente con información sobre el TESSFP. Si tienes alguna pregunta específica sobre el Tecnológico, estaré encantado de asistirte."
+}
