@@ -1,6 +1,12 @@
 // Archivo: api/grok.js
 // Este archivo maneja las solicitudes a la API de Grok
 import fetch from 'node-fetch';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Función para manejar solicitudes POST
 export default async function handler(req, res) {
@@ -8,14 +14,32 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método no permitido" })
   }
-
   try {
     // Extraer la consulta y el contexto del sistema del cuerpo de la solicitud
-    const { query, system } = req.body
+    const { query, system } = req.body;
 
     if (!query) {
-      return res.status(400).json({ error: "La consulta es requerida" })
-    }    // Usar las variables de entorno
+      return res.status(400).json({ error: "La consulta es requerida" });
+    }    // Cargar y procesar el archivo TSV
+    let tessfpData = "";
+    try {
+      const tsvPath = path.join(__dirname, '..', 'data', 'tessfp_info.tsv');
+      const rawData = await fs.readFile(tsvPath, 'utf-8');
+      
+      // Procesar el TSV en un formato más legible
+      const lines = rawData.split('\n').map(line => line.trim()).filter(Boolean);
+      const processed = lines.map(line => {
+        const [category, info] = line.split('\t').map(s => s.trim());
+        return info ? `${category}: ${info}` : category;
+      }).join('\n');
+      
+      tessfpData = processed;
+      console.log("Archivo TSV cargado exitosamente");
+    } catch (error) {
+      console.warn("No se pudo cargar el archivo TSV:", error.message);
+    }
+    
+    // Usar las variables de entorno
     const apiKey = process.env.GROQ_API_KEY;
     const xaiApiKey = process.env.XAI_API_KEY;
     
@@ -35,11 +59,19 @@ export default async function handler(req, res) {
           "Accept": "application/json"
         },
         signal: controller.signal,
-        body: JSON.stringify({
-          model: "mixtral-8x7b-32768",
+        body: JSON.stringify({          model: "mixtral-8x7b-32768",
           messages: [
             {
-              role: "system",              content: system || `Eres un asistente virtual amigable y conversacional para el TESSFP. 
+              role: "system",
+              content: system || `Eres un asistente virtual amigable y conversacional para el TESSFP (Tecnológico de Estudios Superiores de San Felipe del Progreso).
+              
+              INFORMACIÓN DEL TESSFP:
+              ${tessfpData || 'No hay información específica del TESSFP disponible en este momento.'}
+              
+              INSTRUCCIONES ESPECÍFICAS:
+              1. Usa la información proporcionada arriba para responder preguntas sobre el TESSFP.
+              2. Si la información solicitada no está en los datos proporcionados, indícalo claramente.
+              
               IMPORTANTE:
               1) Si ya estás en una conversación, NO saludes nuevamente.
               2) Si alguien responde "sí", "ok" o similar a una pregunta tuya, proporciona la información que ofreciste.
