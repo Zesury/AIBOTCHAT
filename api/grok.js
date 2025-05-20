@@ -20,11 +20,21 @@ export default async function handler(req, res) {
 
     if (!query) {
       return res.status(400).json({ error: "La consulta es requerida" });
-    }    // Cargar y procesar el archivo TSV
+    }    // Cargar y procesar el archivo TSV desde Google Sheets
     let tessfpData = "";
     try {
-      const tsvPath = path.join(__dirname, '..', 'data', 'tessfp_info.tsv');
-      const rawData = await fs.readFile(tsvPath, 'utf-8');
+      const TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTfyt324lkoc9CpJcc09KaOg47eE4XAFYGBvxPe26xTzfkypdGJlfIlQl5FmobVmlvlsNGpYcZZYhL7/pub?output=tsv";
+      console.log("Intentando cargar TSV desde:", TSV_URL);
+      
+      const response = await fetch(TSV_URL);
+      if (!response.ok) {
+        throw new Error(`Error al obtener TSV: ${response.status} ${response.statusText}`);
+      }
+      
+      const rawData = await response.text();
+      if (!rawData || rawData.trim() === "") {
+        throw new Error("El archivo TSV está vacío");
+      }
       
       // Procesar el TSV en un formato más legible
       const lines = rawData.split('\n').map(line => line.trim()).filter(Boolean);
@@ -34,7 +44,7 @@ export default async function handler(req, res) {
       }).join('\n');
       
       tessfpData = processed;
-      console.log("Archivo TSV cargado exitosamente");
+      console.log("Datos TSV cargados exitosamente");
     } catch (error) {
       console.warn("No se pudo cargar el archivo TSV:", error.message);
     }
@@ -66,7 +76,12 @@ export default async function handler(req, res) {
               content: system || `Eres un asistente virtual amigable y conversacional para el TESSFP (Tecnológico de Estudios Superiores de San Felipe del Progreso).
               
               INFORMACIÓN DEL TESSFP:
-              ${tessfpData || 'No hay información específica del TESSFP disponible en este momento.'}
+              ${tessfpData || 'Intentando obtener la información más actualizada del TESSFP...'}
+              
+              INSTRUCCIONES IMPORTANTES:
+              1. Usa la información específica del TESSFP proporcionada arriba para responder preguntas.
+              2. Si la información solicitada está en los datos del TSV, úsala de manera precisa.
+              3. Si la información no está disponible en los datos proporcionados, indícalo claramente y sugiere contactar directamente al TESSFP.
               
               INSTRUCCIONES ESPECÍFICAS:
               1. Usa la información proporcionada arriba para responder preguntas sobre el TESSFP.
